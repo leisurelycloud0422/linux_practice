@@ -1,9 +1,36 @@
 ## I2C
  I2C 架構 4 元件：  
- 1.adapter : 	代表主機端的 I2C 控制器  
- 2.algorithm : 控制 I2C 傳輸的方法  
- 3.client : 代表一個 I2C 裝置，例如 TMP102 溫度感測器  
- 4.driver : 操作特定裝置（client）的邏輯驅動程式  
+ ##### 1. adapter  	
+       定義：表示一個實際的 I2C 控制器（例如 SoC 上的某個 I2C 硬體）。
+       由誰註冊：Platform driver 或 I2C bus driver。
+       代表：一條 I2C Bus（實體匯流排），每個 adapter 對應一條 bus。
+       結構體：struct i2c_adapter
+       重要欄位：
+       - name：名稱
+       - algo：指向 i2c_algorithm 的指標，用於低階操作
+       - nr：bus 編號（如 /dev/i2c-0）  
+ ##### 2. algorithm : 控制 I2C 傳輸的方法
+       定義：adapter 所使用的底層傳輸函式介面。
+       角色：提供實作函式給核心，例如 master_xfer() 來收發資料。
+       結構體：struct i2c_algorithm
+       重要函式：
+       - master_xfer()：傳輸函式
+       - functionality()：告訴核心此 controller 支援哪些功能
+ ##### 3. client : 代表一個 I2C 裝置，例如 TMP102 溫度感測器  
+       定義：描述一個 I2C 裝置（client/slave device）
+       由誰建立：可以由 Device Tree、自動探測、或 i2c_new_client_device()
+       結構體：struct i2c_client
+       重要欄位：
+       - addr：裝置位址（如 0x48）
+       - adapter：對應的 i2c_adapter 指標
+       - driver：指向綁定的 i2c_driver
+ ##### 4. driver : 操作特定裝置（client）的邏輯驅動程式  
+       定義：負責與某類 client 裝置溝通的程式邏輯。
+       由誰註冊：驅動程式模組（driver module）會呼叫 i2c_add_driver() 註冊。
+       結構體：struct i2c_driver
+       重要欄位：
+       - probe()：client 裝置被偵測或註冊時呼叫
+       - id_table：支援的裝置清單（如 {"tmp102", 0}）
 <br>
 
 ## 模擬 vs 真實 Device Tree 差異整理  
@@ -53,3 +80,35 @@ echo tmp102_sim 0x48 | sudo tee /sys/bus/i2c/devices/i2c-0/new_device
 
 echo 0-0048 | sudo tee /sys/bus/i2c/devices/i2c-0/delete_device  
   - Kernel 接收到刪除命令，從 i2c-0 bus 中移除名為 1-0048 的裝置
+<br>
+
+## 流程
+#### Platform Driver 配對流程
+  1. Device Tree (.dts) 編寫
+  2. Kernel 開機時解析 DTS → 建立 platform_device
+  3. platform_driver註冊並配對該 platform_device
+  4. .probe() 中呼叫 i2c_add_adapter() 註冊 I2C bus → 建立 i2c_adapter
+  5. i2c-core 掃描 DTS，找出與此 adapter 相關的 i2c_client
+  6. 建立對應的 i2c_client → 掛載在某個 i2c_adapter（i2c bus）上
+  7. 註冊的 i2c_driver 透過 of_match_table 或 id_table 比對
+  8. 在 i2c_driver 的 .probe() 中，開始與硬體溝通
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
