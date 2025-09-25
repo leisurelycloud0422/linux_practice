@@ -21,14 +21,17 @@ make :讀取 Makefile 並執行其中的編譯指令
 ## 重要指令
 module_init()：模組被載入時執行的初始化函數  
 module_exit()：模組被卸除時執行的清理函數  
+insmod :把.ko 模組載入 Linux 核心
+modprobe :智慧載入模組，會自動處理依賴
+rmmod :移除模組  
+dmesg :查看 kernel log（動態日誌） 
+modinfo :查看模組的靜態資訊 
+<br><br>
+
 MODULE_LICENSE("GPL") :告訴 kernel 是開源模組  
 MODULE_AUTHOR(...) :註明作者  
 MODULE_DESCRIPTION(...) :模組簡介  
 MODULE_PARM_DESC(x,"...") :描述module parameter的說明文字的巨集,這個說明會在使用者查詢模組資訊時顯示出來，例如用 modinfo 指令查看 .ko 模組時  
-insmod :載入模組  
-rmmod :移除模組  
-dmesg :查看 kernel log（動態日誌） 
-modinfo :查看模組的靜態資訊 
 <br><br>
 module_param(name, type, perm):                  // 加入參數
   - name: 變數名稱
@@ -36,5 +39,7 @@ module_param(name, type, perm):                  // 加入參數
   - perm: 權限（檔案 /sys/module/<modname>/parameters/ 的屬性），如：
     * 000: 不允許從 /sys/ 修改
     * 0644: 使用者可讀寫
-##
+<br><br>
+
+## 
 
