@@ -1,3 +1,12 @@
+## 📑 目錄
+- **Device**
+- **/dev/mydev**
+- **cdev**
+- **udev**
+- **如何創建 /dev/mydev？**
+- **如何創建 cdev？**
+- **重要指令**  
+
 ## Device
 在 Linux 裡，Device是用來跟硬體互動的抽象介面。Linux 會把裝置當成一種檔案（裝置檔），例如 /dev/tty、/dev/sda。這些裝置大致可以分為兩類  
 #### 1.字元裝置（Character Device）  
@@ -19,7 +28,7 @@
 
 
 ## cdev
-### ✅ **1. cdev 是 Kernel 內部的「字元裝置模型」**
+###  **cdev 是 Kernel 內部的「字元裝置模型」**
 
 📌 **屬於 Kernel 裡的資料結構，用來代表一個 character device（字元裝置）。**
 
@@ -41,7 +50,7 @@
 
 
 ## udev
-#### ✅ **2. udev 是 User Space 的「自動創建 /dev 檔案的守護程式」**
+###  **udev 是 User Space 的「自動創建 /dev 檔案的守護程式」**
 
 📌 **udev 是 Linux 使用者空間的系統服務（daemon）**
 
@@ -170,7 +179,7 @@ Linux 核心裡用來定義「這個裝置可以做哪些操作」的結構體
 
 
 ## 重要指令
-#### static ssize_t my_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) 
+#### ✅`static ssize_t my_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)` 
   - file :使用者對裝置開啟的檔案描述結構
   - buf	:使用者提供的 buffer，要把資料讀進去（user space）
   - count :使用者想讀多少 byte
@@ -179,32 +188,32 @@ Linux 核心裡用來定義「這個裝置可以做哪些操作」的結構體
   - loff_t :表示檔案位移的資料型別，64 位元整數，支援超過 2GB 檔案的位移
   - size_t :無號整數 (ssize_t 是有號整數)  
 
-#### copy_to_user(buf, device_buffer + *ppos, count)  
+#### ✅`copy_to_user(buf, device_buffer + *ppos, count)`  
   - copy_to_user() 將kernel space的資料複製到user space的 buf
   - 從 device_buffer + *ppos 開始複製 count 個 byte
 
-#### copy_from_user(device_buffer, user_buf, count)
+#### ✅`copy_from_user(device_buffer, user_buf, count)`
   - 將user space的資料複製到kernel space的 buf
 <img width="478" height="284" alt="image" src="https://github.com/user-attachments/assets/c9bef77d-4d52-49fd-b82c-a1e0ceb0480a" />  
 
-#### int register_chrdev(unsigned int major, const char *name, const struct file_operations *fops)   
+#### ✅`int register_chrdev(unsigned int major, const char *name, const struct file_operations *fops)`   
   - 註冊一個簡單的字元裝置（無需 device class）
   - major傳入 0 表示：請核心自動分配一個空的主設備號（major number）
   - DEVICE_NAME：是這個設備的名稱
   - &fops指向一個 struct file_operations 結構(open/read/write）
   - 回傳值：≥0：代表成功，並且是分配到的 major number 。 <0：代表失敗，會是一個錯誤碼（例如 -EBUSY, -ENOMEM）
 
-#### void unregister_chrdev(unsigned int major, const char *name)  
+#### ✅`void unregister_chrdev(unsigned int major, const char *name)`  
   - 移除先前用 register_chrdev() 註冊的字元裝置，釋放主設備號，避免資源洩漏
   - 字元裝置名稱，需與 register_chrdev() 使用的相同
 
-#### sudo mknod /dev/mydev c 240 0 (mknod [路徑] [類型] [主設備號] [次設備號])  
+#### ✅`sudo mknod /dev/mydev c 240 0 (mknod [路徑] [類型] [主設備號] [次設備號])`  
   - /dev/mydev：建立的裝置檔案名稱（裝置節點會出現在 /dev/ 下）
   - c :代表是 字元裝置（char device），不是 block 裝置
   - 240 ：major number，用來指定這個裝置要交給哪個驅動處理（模組裡 register_chrdev() 回傳的數字）
   - 0 ：minor number，通常用來區分同一類裝置的不同實例，這裡設為 0 即可
 
-#### dmesg | grep mydev (查看 major number)
+#### `dmesg | grep mydev (查看 major number)`
 
 
 
