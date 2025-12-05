@@ -15,6 +15,8 @@ static struct device *mydev_device;
 
 static char device_buffer[BUFFER_SIZE];
 static int buffer_size = 0;
+static char kernel_buffer[1024];
+static int pos = 0;
 
 // ---- File operations ----
 static int my_open(struct inode *inode, struct file *file)
@@ -29,40 +31,45 @@ static int my_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-static ssize_t my_read(struct file *file, char __user *buf,
-                       size_t count, loff_t *ppos)
+static ssize_t mydev_write(struct file *file, const char __user *buf,
+                           size_t count, loff_t *ppos)
 {
-    if (*ppos >= buffer_size)
-        return 0;
-    if (count > buffer_size - *ppos)
-        count = buffer_size - *ppos;
+    if (count > sizeof(kernel_buffer) - 1)
+        count = sizeof(kernel_buffer) - 1;
 
-    if (copy_to_user(buf, device_buffer + *ppos, count))
+    if (copy_from_user(kernel_buffer, buf, count))
+        return -EFAULT;
+
+    kernel_buffer[count] = '\0';
+    pos = count;
+    printk(KERN_INFO "mydev: write %s\n", kernel_buffer);
+
+    return count;
+}
+
+static ssize_t mydev_read(struct file *file, char __user *buf,
+                          size_t count, loff_t *ppos)
+{
+    if (*ppos >= pos)
+        return 0;
+
+    if (count > pos - *ppos)
+        count = pos - *ppos;
+
+    if (copy_to_user(buf, kernel_buffer + *ppos, count))
         return -EFAULT;
 
     *ppos += count;
     return count;
 }
 
-static ssize_t my_write(struct file *file, const char __user *buf,
-                        size_t count, loff_t *ppos)
-{
-    if (count > BUFFER_SIZE)
-        count = BUFFER_SIZE;
-
-    if (copy_from_user(device_buffer, buf, count))
-        return -EFAULT;
-
-    buffer_size = count;
-    return count;
-}
 
 static struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = my_open,
     .release = my_release,
-    .read = my_read,
-    .write = my_write,
+    .read = mydev_read,
+    .write = mydev_write,
 };
 
 // ---- Module init ----
@@ -90,8 +97,8 @@ static int __init mydev_init(void)
         return ret;
     }
 
-    // 4. 建立 class
-    mydev_class = class_create(THIS_MODULE, DEVICE_NAME);
+    // ---- 建立 class ----
+    mydev_class = class_create(DEVICE_NAME);
     if (IS_ERR(mydev_class)) {
         cdev_del(&my_cdev);
         unregister_chrdev_region(dev_num, 1);
@@ -99,9 +106,9 @@ static int __init mydev_init(void)
         return PTR_ERR(mydev_class);
     }
 
-    // 5. 建立 device（會自動在 /dev/mydev 出現）
+// ---- 建立 device ----
     mydev_device = device_create(mydev_class, NULL, dev_num,
-                                 NULL, DEVICE_NAME);
+                                NULL, DEVICE_NAME);
     if (IS_ERR(mydev_device)) {
         class_destroy(mydev_class);
         cdev_del(&my_cdev);
