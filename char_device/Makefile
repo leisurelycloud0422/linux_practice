@@ -1,4 +1,4 @@
-obj-m += oldway.o  mydev.o cdev.o
+obj-m += oldway.o  newway.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
