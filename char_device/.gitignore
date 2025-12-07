@@ -1,0 +1,18 @@
+# 忽略編譯出來的二進制檔案
+*.o
+*.ko
+*.mod.c
+*.mod.o
+
+# 忽略核心編譯系統產生的檔案
+modules.order
+Module.symvers
+.tmp_versions/
+
+# 忽略編譯過程的隱藏紀錄檔 (例如 .mydev.ko.cmd)
+.*.cmd
+.*.d
+
+# 忽略編輯器產生的暫存檔 (例如 .swp)
+*.swp
+*~
