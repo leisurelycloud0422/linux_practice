@@ -45,12 +45,50 @@ hwmon 裝置的 sysfs 條目通常位於 `/sys/class/hwmon/` 下
 **2. 定義 chip 支援哪些感測器（temp1_input）**  
 **3. 實作讀取函數（.read callback）**  
 **4. 使用 hwmon_device_register_with_info() 註冊裝置**   
-**5. Kernel 自動建立 /sys/class/hwmon/hwmon/temp1_input節點**
+**5. Kernel 自動建立 /sys/class/hwmon/hwmon/temp1_input節點**    
 **6. 使用者透過 cat 指令查看溫度值**  
 <br>
 
 ## 重要指令   
-<img width="653" height="607" alt="image" src="https://github.com/user-attachments/assets/e6d8b810-f9b8-4921-a52c-4ad5f569c36e" />  
+![messageImage_1765718993085](https://github.com/user-attachments/assets/9d4162f5-9ffc-4745-af13-41bb181a7980)
+///////<img width="653" height="607" alt="image" src="https://github.com/user-attachments/assets/e6d8b810-f9b8-4921-a52c-4ad5f569c36e" />  
+<br>
+
+#### ✅`struct hwmon_chip_info`  
+告訴 kernel 這個硬體監控晶片有哪些操作函式 (ops) 和感測器資訊 (info)
+  - .ops : 指向前面定義的 fake_hwmon_ops，也就是告訴 kernel 如何讀取資料和控制顯示
+  - .info : 指向 fake_info，描述晶片提供哪些感測器類型和屬性
+
+作用：hwmon 子系統會根據這些資訊，幫你自動生成對應的 sysfs 屬性文件  
+<br>
+
+
+#### ✅`struct hwmon_ops`  
+註冊一組 hwmon 操作函式 給 hwmon 子系統用  
+  - 內容：
+    - `read`、`write`、`update` 等函數指針。
+    - 由 **hwmon core** 在 sysfs 存取時呼叫，完成與硬體的實際讀寫
+
+作用：把硬體操作抽象出來，hwmon 核心不用關心不同晶片的寄存器地址或通訊協定   
+<br>
+
+#### ✅`struct hwmon_channel_info` 
+描述一組「感測器通道」(channel) 的屬性和類型，告訴 kernel 該通道提供什麼類型的感測資料
+  - 內容：
+    - **監控類型**：如 `temp`、`fan`、`power`。
+    - **支援的屬性**：如溫度感測器的各種屬性。
+    - **通道號碼**：用於區分不同通道  
+
+作用：hwmon 核心依據這個資訊，對每個通道自動生成對應的 sysfs 文件   
+<br>
+
+#### ✅`hwmon_device_register_with_info(&pdev->dev, "fake_temp_sensor", NULL, &fake_chip_info, NULL)`  
+將這個 device 註冊到 hwmon 子系統中
+  - &pdev->dev：傳入設備本身的 struct device
+  - "fake_temp_sensor"：指定在 sysfs 下的名稱，會成為 /sys/class/hwmon/hwmonX/name 的內容
+  - NULL：傳入的私有資料指標，這裡不使用
+  - &fake_chip_info：之前定義的 hwmon_chip_info，提供感測器通道和操作函式資訊
+  - NULL：保留參數，通常用不到
 <br>
 
 #### ✅`static int fake_temp_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val)` 
@@ -68,34 +106,6 @@ hwmon 裝置的 sysfs 條目通常位於 `/sys/class/hwmon/` 下
   - 屬性是 hwmon_temp_input（即 /sys/class/hwmon/hwmonX/temp1_input時，才允許它有讀取權限
 <br>
 
-#### ✅`static const struct hwmon_ops fake_hwmon_ops`  
-註冊一組 hwmon 操作函式 給 hwmon 子系統用  
-  - .is_visible : fake_is_visible 決定 sysfs 中有哪些屬性會被顯示，以及它們的權限  
-  - .read : 實作讀取某個 sensor 值的函式
-<br>
-
-#### ✅`static const struct hwmon_channel_info *fake_info[]` 
-描述一組「感測器通道」(channel) 的屬性和類型，告訴 kernel 該通道提供什麼類型的感測資料
-  - 這裡用 HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT) 巨集表示
-  - 感測器類型是「溫度」（temp）
-  - 屬性是「輸入值」（HWMON_T_INPUT）
-  - 陣列最後放 NULL 是為了表示結束
-<br>
-
-#### ✅`static const struct hwmon_chip_info fake_chip_info`  
-告訴 kernel 這個硬體監控晶片有哪些操作函式 (ops) 和感測器資訊 (info)
-  - .ops : 指向前面定義的 fake_hwmon_ops，也就是告訴 kernel 如何讀取資料和控制顯示
-  - .info : 指向 fake_info，描述晶片提供哪些感測器類型和屬性
-<br>
-
-#### ✅`hwmon_device_register_with_info(&pdev->dev, "fake_temp_sensor", NULL, &fake_chip_info, NULL)`  
-將這個 device 註冊到 hwmon 子系統中
-  - &pdev->dev：傳入設備本身的 struct device
-  - "fake_temp_sensor"：指定在 sysfs 下的名稱，會成為 /sys/class/hwmon/hwmonX/name 的內容
-  - NULL：傳入的私有資料指標，這裡不使用
-  - &fake_chip_info：之前定義的 hwmon_chip_info，提供感測器通道和操作函式資訊
-  - NULL：保留參數，通常用不到
-<br>
 
 #### ✅`PTR_ERR_OR_ZERO(hwmon_dev)`  
 hwmon_device_register_with_info 回傳的是指標或錯誤編碼，用 PTR_ERR_OR_ZERO 宏轉換：
