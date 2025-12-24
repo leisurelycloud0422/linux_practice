@@ -49,38 +49,66 @@
 <br>
 
 ## 重要指令
-#### ✅`static struct i2c_driver tmp102_sim_driver ` 
-  - 定義一個 I2C 驅動的結構體
-  - driver.name : Linux 內部用來比對裝置名稱的欄位，要和後續綁定模擬裝置所用的名稱一致
-  - .probe  :  kernel 發現有匹配這個 driver 的裝置時，會呼叫的初始化函式
-  - .id_table : 裝置辨識表，用來告訴 kernel 這個 driver 支援哪些裝置名稱，呼叫 .probe 的機制
+#### ✅`int i2c_master_send(struct i2c_client *client, const char *buf, int count); `   
+向 I2C 裝置 (slave) 發送資料
+相當於在 bus 上傳送 count 個 byte
+ - client : 指向 i2c_client 的指標，表示要操作的裝置
+ - buf : 要發送的資料緩衝區
+ - count : 要發送的 byte 數量
+ - 成功 → 發送的 byte 數量
+   失敗 → 負數錯誤碼，例如 -EIO
 <br>
 
-#### ✅`module_i2c_driver(tmp102_sim_driver)`  
-  - 一個macro，是 Linux 核心提供的簡化註冊 I2C driver 的工具
-  - 會自動產生如下的程式碼：
-<img width="445" height="300" alt="image" src="https://github.com/user-attachments/assets/949b7f76-03ad-472f-b345-c632a1ab166b" />  
+#### ✅`int i2c_master_recv(struct i2c_client *client, char *buf, int count); `  
+從 I2C 裝置 (slave) 接收資料
+會自動加上 start condition 和 stop condition
+一般用在 讀取 ADC / sensor 資料 的情境
+ - client : 指向 i2c_client 的指標
+ - buf : 資料接收緩衝區，會把裝置傳回的資料放在這裡
+ - count : 要讀取的 byte 數量
+ - 成功 → 實際接收的 byte 數量
+ - 失敗 → 負數錯誤碼
 <br>
 
-#### ✅`s32 i2c_smbus_read_byte_data(const struct i2c_client *client, u8 command)`  
-  -  Linux I2C core 提供的一個 SMBus 協定的封裝函式，用來從指定的 I2C 裝置暫存器中讀取一個 byte  
-  -  const struct i2c_client * : 代表要通訊的 I2C 裝置（會含有 I2C bus、裝置地址等資訊） 
-  -  u8（0x00~0xFF）: 要讀取的裝置內部暫存器位址（例如溫度暫存器） 
-  -  回傳值 0x00 ~ 0xFF:成功，而負數 : 失敗  
+#### ✅` static int i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)`  
+I2C 裝置被 kernel 掃描到後呼叫
+probe() 是 driver 與 I2C 裝置連接的起點。
+分配 driver 私有資料、存 client 指標、初始化 mutex，然後註冊 hwmon 裝置，這樣使用者空間就可以透過 sysfs 讀取感測器值   
+<br>
+
+#### ✅` static int i2c_remove(struct i2c_client *client)`  
+I2C 裝置被移除或 module 卸載時呼叫
+清理 driver 使用的資源
+ - devm_hwmon_device_register_with_info 自動解除註冊
+ - devm_kzalloc 自動釋放記憶體  
+<br>
+
+#### ✅` static struct i2c_driver vir0511h_driver`
+```
+static struct i2c_driver vir0511h_driver = {
+    .driver = {
+        .name = "vir0511h",
+        .owner = THIS_MODULE,
+        .of_match_table = of_match_ptr(vir0511h_of_match),
+    },
+    .probe = vir0511h_probe,
+    .remove = vir0511h_remove,
+    .id_table = vir0511h_id,
+}; 
+```
+ - .driver : 描述這個 driver 的基本資訊，讓 kernel 可以管理它  
+  - .name : driver 名稱，kernel log 或 sysfs 會用到  
+  - .owner : module 所屬，使用 THIS_MODULE 可讓 module 不被卸載時被 kernel 認識
+  - .of_match_table : device tree 匹配表，如果使用 DT 描述裝置，就用這個來匹配裝置
+ - .probe : 裝置匹配 driver 後呼叫 , 初始化 driver 私有資料、mutex、hwmon 註冊等
+ - .remove : 裝置被移除或 module 卸載時呼叫
+ - .id_table : 傳統 I2C 裝置 ID 匹配表 , 如果沒有 device tree，kernel 就透過這個 table 找到 driver
 <br>
 
 
-#### ✅`sudo modprobe i2c_stub chip_addr=0x48`   
-  - kernel會在系統中創建一個虛擬的 I2C adapter (bus)，並且這個 bus 上有一個模擬的 slave device，address 是 0x48
-  - modprobe i2c_stub :  Linux kernel中一個 模擬 I2C slave 裝置的模組
-  - chip_addr=0x48 : 要模擬的 I2C 裝置地址是 0x48， client driver 在連接到 bus就會找到這個模擬的 slave。
 
-#### ✅`echo tmp102_sim 0x48 | sudo tee /sys/bus/i2c/devices/i2c-0/new_device ` 
-  - 在 i2c-0 bus 上新增一個名稱為 tmp102_sim，地址為 0x48 的 I2C client 裝置
-  - tee : 讀取標準輸入並寫入檔案
 
-#### ✅`echo 0-0048 | sudo tee /sys/bus/i2c/devices/i2c-0/delete_device ` 
-  - Kernel 接收到刪除命令，從 i2c-0 bus 中移除名為 1-0048 的裝置
+
 <br>
 
 ## 流程
@@ -88,11 +116,12 @@
   1. Device Tree (.dts) 編寫
   2. Kernel 開機時解析 DTS → 建立 platform_device
   3. platform_driver註冊並配對該 platform_device
-  4. .probe() 中呼叫 i2c_add_adapter() 註冊 I2C bus → 建立 i2c_adapter
-  5. i2c-core 掃描 DTS，找出與此 adapter 相關的 i2c_client
-  6. 建立對應的 i2c_client → 掛載在某個 i2c_adapter（i2c bus）上
-  7. 註冊的 i2c_driver 透過 of_match_table 或 id_table 比對
-  8. 在 i2c_driver 的 .probe() 中，開始與硬體溝通
+  4. 硬體控制器 driver 初始化 ,.probe() 中會初始化硬體寄存器，建立 i2c_adapter → 代表某個 I2C bus。
+  5. .probe() 中呼叫 i2c_add_adapter() 註冊 I2C bus → 建立 i2c_adapter
+  6. i2c-core 掃描 DTS，找出與此 adapter 相關的 i2c_client
+  7. 建立對應的 i2c_client → 掛載在某個 i2c_adapter（i2c bus）上
+  8. 註冊的 i2c_driver 透過 of_match_table 或 id_table 比對
+  9. 在 i2c_driver 的 .probe() 中，開始與硬體溝通
 
 
 
