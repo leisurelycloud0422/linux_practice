@@ -40,13 +40,42 @@ hwmon 裝置的 sysfs 條目通常位於 `/sys/class/hwmon/` 下
 
 <img width="861" height="320" alt="image" src="https://github.com/user-attachments/assets/4ffa1a3d-8550-47d6-b0d3-267cdb1f223b" />  
 
-## 整體流程  
-**1. 撰寫 hwmon 驅動程式**  
-**2. 定義 chip 支援哪些感測器（temp1_input）**  
-**3. 實作讀取函數（.read callback）**  
-**4. 使用 hwmon_device_register_with_info() 註冊裝置**   
-**5. Kernel 自動建立 /sys/class/hwmon/hwmon/temp1_input節點**    
-**6. 使用者透過 cat 指令查看溫度值**  
+  
+### VIR0511H Driver 整體流程
+
+```I2C 裝置上電
+↓  
+kernel I2C 子系統掃描 bus
+↓  
+匹配 driver
+  ├─ 傳統 ID: i2c_device_id
+  └─ Device Tree: of_device_id
+↓  
+呼叫 probe()
+  ├─ 分配 driver 私有資料 (devm_kzalloc)
+  ├─ 存 client 指標 (data->client)
+  ├─ 初始化 mutex (data->update_lock)
+  └─ 註冊 hwmon 裝置 (devm_hwmon_device_register_with_info)
+↓  
+使用者空間透過 sysfs 讀取
+↓  
+hwmon core 呼叫 driver 的 read() function
+↓  
+read() 會呼叫 vir0511h_update_client()
+  ├─ 取回 driver 私有資料 (dev_get_drvdata)
+  ├─ 檢查 cache 是否過期
+  ├─ 如果過期，for each channel:
+  │     ├─ 設定 ADC channel (vir0511h_set_config)
+  │     ├─ 延遲等待 ADC 轉換 (mdelay)
+  │     └─ 讀 ADC 值 (vir0511h_i2c_read_data)
+  ├─ 更新 cache (data->temp_code[])
+  └─ 更新 last_updated, valid flag
+↓  
+返回 clean / raw ADC value
+  └─ read() 會清除 status bits ( & 0x7fff )
+```
+
+
 <br>
 
 ## 重要指令   
@@ -68,8 +97,10 @@ hwmon 裝置的 sysfs 條目通常位於 `/sys/class/hwmon/` 下
   - 內容：
     - `read`、`write`、`update` 等函數指針。
     - 由 **hwmon core** 在 sysfs 存取時呼叫，完成與硬體的實際讀寫
+    - is_visible → 控制 sysfs 權限，哪些通道可見、可讀、可寫
+    - read → 提供讀取感測器值的 callback
 
-作用：把硬體操作抽象出來，hwmon 核心不用關心不同晶片的寄存器地址或通訊協定   
+作用：提供 hwmon 核心訪問 driver 的接口，例如讀取感測器值和控制 sysfs 權限     
 <br>
 
 #### ✅`struct hwmon_channel_info` 
@@ -82,22 +113,33 @@ hwmon 裝置的 sysfs 條目通常位於 `/sys/class/hwmon/` 下
 作用：hwmon 核心依據這個資訊，對每個通道自動生成對應的 sysfs 文件   
 <br>
 
-#### ✅`hwmon_device_register_with_info(&pdev->dev, "fake_temp_sensor", NULL, &fake_chip_info, NULL)`  
-將這個 device 註冊到 hwmon 子系統中
-  - &pdev->dev：傳入設備本身的 struct device
-  - "fake_temp_sensor"：指定在 sysfs 下的名稱，會成為 /sys/class/hwmon/hwmonX/name 的內容
-  - NULL：傳入的私有資料指標，這裡不使用
-  - &fake_chip_info：之前定義的 hwmon_chip_info，提供感測器通道和操作函式資訊
-  - NULL：保留參數，通常用不到
+#### ✅`hwmon_dev = devm_hwmon_device_register_with_info(&client->dev, client->name, data, &vir0511h_chip_info, NULL);`  
+註冊一個 hwmon 裝置到 sysfs
+核心會自動在 /sys/class/hwmon/hwmonX/ 下建立對應節點
+使用者空間透過 cat /sys/class/hwmon/hwmonX/temp1_input 讀取溫度
+  - &client->dev：父 device，hwmon 裝置會掛在這個 device 下
+  - client->name：裝置名稱，例如 "vir0511h"
+  - data：driver 私有資料，hwmon core 會在 read/is_visible 裡傳回
+  - &vir0511h_chip_info：前面定義的感測器 channel info + ops
+  - NULL：選填，額外屬性或 callback，不常用
 <br>
 
-#### ✅`static int fake_temp_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val)` 
-自訂模擬用的，所以參數沒有被實際使用，不過在真實的 hwmon driver 裡很重要
-   - dev: 裝置指標
-   - type: 感測器類型（這裡是 hwmon_temp）
-   - attr: 屬性類型（這裡會是 hwmon_temp_input）
-   - channel: 第幾個感測通道（temp1、temp2 等，這裡只有 channel 0）
-   - val: 用來回傳讀到的資料
+#### ✅`static int vir0511h_read(struct device *dev, enum hwmon_sensor_types type,u32 attr, int channel, long *val)` 
+這是 hwmon 驅動的核心讀取函式，當使用者空間透過 sysfs 讀取溫度或其他感測器資料時會被呼叫。
+目標：將快取的 raw ADC 值轉換成乾淨數值，回傳給使用者。
+   - dev: Linux device model，對應 driver 的裝置
+   - type: 感測器種類，例如 hwmon_temp 
+   - attr: 感測器屬性，例如 hwmon_temp_input
+   - channel: 感測器通道編號，對應 temp_code[channel]
+   - val: 輸出變數，將讀到的值寫回使用者空間
+<br>
+#### ✅`static umode_t vir0511h_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)` 
+控制 sysfs 權限與可見性
+Linux hwmon core 會問這個函式：這個感測器的這個屬性、這個通道是否可讀？可寫？
+   - data: driver 私有資料，通常不用修改
+   - type: 感測器類型
+   - attr: 屬性，例如 hwmon_temp_input
+   - channel: 通道編號
 <br>
 
 #### ✅`static umode_t fake_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)`  
