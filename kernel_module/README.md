@@ -1,4 +1,4 @@
-## 📑 目錄
+## 目錄
 - **Linux Kernel Module**
 - **Makefile**
 - **重要指令**
@@ -70,7 +70,7 @@ make :讀取 Makefile 並執行其中的編譯指令
 
 - 這樣 kernel 啟動時才會「認識」板子上有這顆裝置
 - 查看設備樹節點 在開發版上輸入 ls /proc/device-tree/  
-👉 **真實開發差別**：模擬環境可以直接呼叫驅動，但實機一定要靠 **DT 描述硬體**，驅動才會被綁定
+**真實開發差別**：模擬環境可以直接呼叫驅動，但實機一定要靠 **DT 描述硬體**，驅動才會被綁定
 ###### 3️⃣ 撰寫驅動程式 (Driver Code)
 - 新增一個 `.c` 驅動檔：
     - 使用 `platform_driver_register()` → 比對 `compatible`
@@ -79,17 +79,17 @@ make :讀取 Makefile 並執行其中的編譯指令
 ##### 4️⃣ 編譯 & 部署驅動
 - 使用交叉編譯器 `arm-linux-gnueabihf-gcc` 把 `.c` 編成 `.ko`
 - 複製到板子（NFS/SD 卡/SSH）
-- `insmod mydev.ko` → 驅動載入成功
-👉 **模擬環境 (x86)** 可以直接 `make`，
-👉 **真實嵌入式** 必須用 **交叉編譯器**，因為目標 CPU 不是 x86
+- `insmod mydev.ko` → 驅動載入成功  
+   **模擬環境 (x86)** 可以直接 `make`，  
+   **真實嵌入式** 必須用 **交叉編譯器**，因為目標 CPU 不是 x86
 ##### 5️⃣ 驗證 /sys 與 /dev 節點
 - 驅動註冊成功後會出現：
     - `/sys/class/mydev/...` → 驅動屬性檔 (用來 debug / 調參數)
     - `/dev/mydev` → 真正提供給使用者空間 App 存取的裝置檔
-    👉 真實情況下，這些節點是由驅動 + udev 自動建立
+    真實情況下，這些節點是由驅動 + udev 自動建立
 ##### 6️⃣ 撰寫應用程式 (User-space App) 
 - 透過 /dev/mydev 進行操作：
-👉 **為何要 App？**
+**為何要 App？**
 因為 kernel driver 只是提供介面，實際的業務邏輯 / 顯示 / 傳輸，要靠 **User-space App**
 ##### 7️⃣ 測試 & Debug
 - 驗證功能正確性
