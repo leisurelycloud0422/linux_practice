@@ -155,21 +155,21 @@ struct platform_device_info pdevinfo : 建立的 Platform Device 的資訊
 <br><br>  
 
 ## 流程
-### 使用設備樹的內核
-**1. Device Tree 定義硬體 ( .dts 或 .dtsi )**
-**2. Kernel 開機時解析 Device Tree**  
-**3. Kernel 自動建立 Platform Device（由內核代為建立）**
-**4. Platform Driver 註冊**
-**5. Kernel 自動配對 Device & Driver** 
-**6. 呼叫 probe() 初始化驅**
-**7. 驅動開始使用裝置的資源**   
+### 使用設備樹的內核  
+**1. Device Tree 定義硬體 ( .dts 或 .dtsi )**  
+**2. Kernel 開機時解析 Device Tree**    
+**3. Kernel 自動建立 Platform Device（由內核代為建立）**  
+**4. Platform Driver 註冊**  
+**5. Kernel 自動配對 Device & Driver**   
+**6. 呼叫 probe() 初始化驅**  
+**7. 驅動開始使用裝置的資源**     
 
-### 沒有使用設備樹的內核  
-**1. 開發者手動撰寫 platform_device（描述裝置資訊）**
-**2. 開發者手動撰寫 platform_driver（實現驅動邏輯）**
-**3. 驅動與裝置透過程式碼配對（通常用 name 或 ID）**
-**4. 呼叫 probe() 初始化驅動**
-**5. 驅動開始使用裝置的資源**
+### 沒有使用設備樹的內核    
+**1. 開發者手動撰寫 platform_device（描述裝置資訊）**  
+**2. 開發者手動撰寫 platform_driver（實現驅動邏輯）**  
+**3. 驅動與裝置透過程式碼配對（通常用 name 或 ID）**  
+**4. 呼叫 probe() 初始化驅動**  
+**5. 驅動開始使用裝置的資源**  
 
 
 
