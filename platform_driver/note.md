@@ -122,7 +122,7 @@ Device Tree 檔案使用 .dts（Device Tree Source）副檔名，會被編譯成
 
 
 ## 重要指令  
-#### ✅`struct platform_driver` :整體結構，定義此驅動的資訊與 callback 
+#### `struct platform_driver` :整體結構，定義此驅動的資訊與 callback 
 struct platform_driver 範例如下:  
 <img width="549" height="226" alt="image" src="https://github.com/user-attachments/assets/7ee46b97-d890-4649-bda7-645340e7d9a2" />  
  - .name : 驅動名稱，用來配對非 device tree 的 platform device
@@ -131,7 +131,7 @@ struct platform_driver 範例如下:
  - .remove : 設備移除或驅動卸載時呼叫，用來清理資源
 <br>
 
-#### ✅`struct of_device_id` : 用來描述與 Device Tree 中裝置相條件的結構體  
+#### `struct of_device_id` : 用來描述與 Device Tree 中裝置相條件的結構體  
 struct of_device_id  範例如下:  
 <img width="515" height="154" alt="image" src="https://github.com/user-attachments/assets/da7d0c21-b49c-4e78-a025-e8f49c83e136" />   
 
@@ -140,12 +140,12 @@ struct of_device_id  範例如下:
  - {} : 結尾的標記，代表這個陣列結束（必要）  
 <br>
 
-#### ✅`MODULE_DEVICE_TABLE(type, name)` : 在編譯時讓 Linux 核心知道這個模組支援哪些裝置，支援自動載入驅動模組  
+#### `MODULE_DEVICE_TABLE(type, name)` : 在編譯時讓 Linux 核心知道這個模組支援哪些裝置，支援自動載入驅動模組  
  - type ： 裝置類型，像是 of, pci, usb, i2c 等
  - name : struct of_device_id 陣列(定義了這個驅動支援哪些 compatible 字串)
 <br>
 
-#### ✅`手動註冊一個 Platform Device`  
+#### `手動註冊一個 Platform Device`  
 <img width="602" height="280" alt="image" src="https://github.com/user-attachments/assets/bcc0f578-f776-40da-8291-6a08c28c9f47" />  
 
 struct platform_device_info pdevinfo : 建立的 Platform Device 的資訊  
