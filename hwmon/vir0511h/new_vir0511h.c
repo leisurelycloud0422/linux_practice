@@ -1,4 +1,3 @@
-#include "vir0511h.h"
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
@@ -12,67 +11,40 @@
 #define VIR0511H_CONVERSION_REG     0x00
 #define VIR0511H_CONFIG_REG         0x01
 
+/* 模擬不同通道的設定值 */
 static uint16_t def_config_data[MAX_TEMP_NUM] = {0x0001, 0x0002, 0x0004, 0x0008};
 
 typedef struct vir0511h_data_s {
     struct i2c_client *client;
     struct mutex update_lock;
-    char valid;
+    bool valid;
     unsigned long last_updated;
-    uint16_t temp_code[MAX_TEMP_NUM];
+    u16 temp_code[MAX_TEMP_NUM];
 } vir0511h_data_t;
 
-/* --------- I2C 低階操作 --------- */
-static int vir0511h_set_read_reg(struct i2c_client *client, uint8_t reg)
-{
-    return i2c_master_send(client, &reg, sizeof(reg));
-}
-
-static int vir0511h_i2c_read_data(struct i2c_client *client, int reg, void *dest, int bytes)
-{
-    int ret;
-
-    if (!dest)
-        return -EINVAL;
-
-    ret = vir0511h_set_read_reg(client, reg);
-    if (ret)
-        return ret;
-
-    return i2c_master_recv(client, dest, bytes);
-}
-
-static int vir0511h_set_config(struct i2c_client *client, uint16_t value)
-{
-    uint8_t buf[3];
-
-    buf[0] = VIR0511H_CONFIG_REG;
-    buf[1] = value >> 8;
-    buf[2] = value & 0xFF;
-
-    return i2c_master_send(client, buf, sizeof(buf));
-}
-
+/* --------- I2C 操作：改用更穩定的 SMBus API --------- */
 static int vir0511h_get_adc_code_by_index(struct i2c_client *client, int index, uint16_t *code)
 {
     int ret;
-    uint8_t code_buff[2];
 
     if (index >= MAX_TEMP_NUM)
         return -EINVAL;
 
-    ret = vir0511h_set_config(client, def_config_data[index]);
-    if (ret)
+    /* 1. 寫入 Config 暫存器 (0x01) 選擇通道 */
+    /* 使用 _swapped 是因為 i2c-stub/x86 通常是 Little-endian，但裝置通常是 Big-endian */
+    ret = i2c_smbus_write_word_swapped(client, VIR0511H_CONFIG_REG, def_config_data[index]);
+    if (ret < 0)
         return ret;
 
-    /* 需要延遲等待 ADC */
+    /* 需要延遲等待 ADC 轉換 */
     mdelay(1);
 
-    ret = vir0511h_i2c_read_data(client, VIR0511H_CONVERSION_REG, code_buff, sizeof(code_buff));
-    if (ret)
+    /* 2. 讀取 Conversion 暫存器 (0x00) */
+    ret = i2c_smbus_read_word_swapped(client, VIR0511H_CONVERSION_REG);
+    if (ret < 0)
         return ret;
 
-    *code = (code_buff[0] << 8) | code_buff[1];
+    *code = (uint16_t)ret;
     return 0;
 }
 
@@ -84,11 +56,13 @@ static vir0511h_data_t *vir0511h_update_client(struct device *dev)
     int i;
 
     mutex_lock(&data->update_lock);
+    /* 1 秒內只更新一次 */
     if (!data->valid || time_after(jiffies, data->last_updated + HZ)) {
-        for (i = 0; i < MAX_TEMP_NUM; i++)
+        for (i = 0; i < MAX_TEMP_NUM; i++) {
             vir0511h_get_adc_code_by_index(client, i, &data->temp_code[i]);
+        }
         data->last_updated = jiffies;
-        data->valid = 1;
+        data->valid = true;
     }
     mutex_unlock(&data->update_lock);
 
@@ -96,13 +70,13 @@ static vir0511h_data_t *vir0511h_update_client(struct device *dev)
 }
 
 /* --------- hwmon_ops 實作 --------- */
-static int vir0511h_read(struct device *dev,
-                         enum hwmon_sensor_types type,
+static int vir0511h_read(struct device *dev, enum hwmon_sensor_types type,
                          u32 attr, int channel, long *val)
 {
     vir0511h_data_t *data = vir0511h_update_client(dev);
 
     if (type == hwmon_temp && attr == hwmon_temp_input && channel < MAX_TEMP_NUM) {
+        /* 讀取快取中的數值 */
         *val = data->temp_code[channel] & 0x7fff;
         return 0;
     }
@@ -110,18 +84,21 @@ static int vir0511h_read(struct device *dev,
     return -EOPNOTSUPP;
 }
 
-static umode_t vir0511h_is_visible(const void *data,
-                                   enum hwmon_sensor_types type,
+static umode_t vir0511h_is_visible(const void *data, enum hwmon_sensor_types type,
                                    u32 attr, int channel)
 {
     if (type == hwmon_temp && attr == hwmon_temp_input && channel < MAX_TEMP_NUM)
-        return 0444; /* 可讀 */
+        return 0444; /* 所有 4 個通道均唯讀可見 */
     return 0;
 }
 
-/* --------- 定義 hwmon channel --------- */
+/* --------- 定義 hwmon channel：修正為 4 個通道 --------- */
 static const struct hwmon_channel_info *vir0511h_info[] = {
-    HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+    HWMON_CHANNEL_INFO(temp,
+                       HWMON_T_INPUT,  /* temp1_input */
+                       HWMON_T_INPUT,  /* temp2_input */
+                       HWMON_T_INPUT,  /* temp3_input */
+                       HWMON_T_INPUT), /* temp4_input */
     NULL
 };
 
@@ -136,8 +113,7 @@ static const struct hwmon_chip_info vir0511h_chip_info = {
 };
 
 /* --------- i2c probe / remove --------- */
-static int vir0511h_probe(struct i2c_client *client,
-                          const struct i2c_device_id *id)
+static int vir0511h_probe(struct i2c_client *client)
 {
     vir0511h_data_t *data;
     struct device *hwmon_dev;
@@ -157,12 +133,11 @@ static int vir0511h_probe(struct i2c_client *client,
     return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
-static int vir0511h_remove(struct i2c_client *client)
+static void vir0511h_remove(struct i2c_client *client)
 {
-    return 0;
+    /* devm 資源自動釋放 */
 }
 
-/* --------- i2c 驅動註冊 --------- */
 static const struct i2c_device_id vir0511h_id[] = {
     { "vir0511h", 0 },
     { }
@@ -188,8 +163,7 @@ static struct i2c_driver vir0511h_driver = {
     .id_table = vir0511h_id,
 };
 
-/* --------- module init / exit --------- */
 module_i2c_driver(vir0511h_driver);
 
-MODULE_DESCRIPTION("vir0511h HWMON Driver (new API)");
+MODULE_DESCRIPTION("vir0511h HWMON Driver (SMBus Version)");
 MODULE_LICENSE("GPL");
