@@ -1,4 +1,4 @@
-## 📑 目錄
+## 目錄
 - **Platform Driver**
 - **Linux 兩種主要驅動類型**
   - Platform Driver（平台驅動）
