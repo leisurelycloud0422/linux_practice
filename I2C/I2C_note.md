@@ -49,9 +49,9 @@
 <br>
 
 ## 重要指令
-#### ✅`int i2c_master_send(struct i2c_client *client, const char *buf, int count); `   
-向 I2C 裝置 (slave) 發送資料
-相當於在 bus 上傳送 count 個 byte
+#### `int i2c_master_send(struct i2c_client *client, const char *buf, int count); `   
+向 I2C 裝置 (slave) 發送資料  
+相當於在 bus 上傳送 count 個 byte  
  - client : 指向 i2c_client 的指標，表示要操作的裝置
  - buf : 要發送的資料緩衝區
  - count : 要發送的 byte 數量
@@ -59,10 +59,10 @@
    失敗 → 負數錯誤碼，例如 -EIO
 <br>
 
-#### ✅`int i2c_master_recv(struct i2c_client *client, char *buf, int count); `  
-從 I2C 裝置 (slave) 接收資料
-會自動加上 start condition 和 stop condition
-一般用在 讀取 ADC / sensor 資料 的情境
+#### `int i2c_master_recv(struct i2c_client *client, char *buf, int count); `  
+從 I2C 裝置 (slave) 接收資料  
+會自動加上 start condition 和 stop condition  
+一般用在 讀取 ADC / sensor 資料 的情境  
  - client : 指向 i2c_client 的指標
  - buf : 資料接收緩衝區，會把裝置傳回的資料放在這裡
  - count : 要讀取的 byte 數量
@@ -70,20 +70,49 @@
  - 失敗 → 負數錯誤碼
 <br>
 
-#### ✅` static int i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)`  
-I2C 裝置被 kernel 掃描到後呼叫
-probe() 是 driver 與 I2C 裝置連接的起點。
-分配 driver 私有資料、存 client 指標、初始化 mutex，然後註冊 hwmon 裝置，這樣使用者空間就可以透過 sysfs 讀取感測器值   
-<br>
+#### ` void *dev_get_drvdata(struct device *dev)`  
+從 struct device 物件中，取回 driver 先前儲存的「私有資料指標」  
+通常用於 sysfs、hwmon、PM callback 中找回 driver state  
+ -  dev : 指向目前裝置的 struct device，由 kernel callback 傳入
+ -  成功 → 回傳先前用 dev_set_drvdata() 設定的指標
+ -  失敗 / 未設定 → 回傳 NULL
 
-#### ✅` static int i2c_remove(struct i2c_client *client)`  
-I2C 裝置被移除或 module 卸載時呼叫
-清理 driver 使用的資源
- - devm_hwmon_device_register_with_info 自動解除註冊
- - devm_kzalloc 自動釋放記憶體  
-<br>
+<br>   
 
-#### ✅` static struct i2c_driver vir0511h_driver`
+#### ` bool time_after(unsigned long a, unsigned long b)`  
+安全地比較 kernel 時間（jiffies），判斷時間 a 是否「晚於」時間 b  
+用來避免 jiffies overflow 導致比較錯誤  
+ -  a : 目前時間 (jiffies
+ -  b : 要比較的時間點
+ -  true → a 在時間上晚於 b
+ -  false → 尚未超過指定時間
+
+<br>  
+
+#### ` bool time_after(unsigned long a, unsigned long b)`  
+安全地比較 kernel 時間（jiffies），判斷時間 a 是否「晚於」時間 b  
+用來避免 jiffies overflow 導致比較錯誤  
+ -  a : 目前時間 (jiffies
+ -  b : 要比較的時間點
+ -  true → a 在時間上晚於 b
+ -  false → 尚未超過指定時間
+
+<br> 
+
+
+#### ` void *devm_kzalloc(struct device *dev, size_t size, gfp_t gfp)`  
+向 kernel 配置一塊「自動管理生命週期」的記憶體   
+當裝置被移除時會自動釋放   
+ -  dev : 裝置對應的 struct device
+ -  size : 要配置的記憶體大小
+ -  gfp :  記憶體配置旗標(常用：GFP_KERNEL（可 sleep）
+ -  成功 → 指向已清 0 的記憶體指標
+ -  失敗 → NULL
+
+<br>   
+
+
+#### ` static struct i2c_driver vir0511h_driver`
 ```
 static struct i2c_driver vir0511h_driver = {
     .driver = {
@@ -106,10 +135,25 @@ static struct i2c_driver vir0511h_driver = {
 <br>
 
 
+#### ` struct device *devm_hwmon_device_register_with_info`
+```
+    hwmon_dev = devm_hwmon_device_register_with_info(&client->dev,
+                                                     client->name,
+                                                     data,
+                                                     &vir0511h_chip_info,
+                                                     NULL);
+```
+向 hwmon 子系統註冊一個感測器裝置  
+自動建立標準的 /sys/class/hwmon/hwmonX/* 節點  
+並將裝置生命週期交由 device-managed framework 管理  
+ - dev : 父裝置  
+ - name : hwmon 裝置名稱  
+ - drvdata : driver 私有資料指標，可用 dev_get_drvdata() 或 hwmon callback 存取
+ - chip : 指向 struct hwmon_chip_info
+ - groups : 額外的 sysfs attribute group，通常可傳 NULL  
+<br>  
 
 
-
-<br>
 
 ## 流程
 #### Platform Driver 配對流程
