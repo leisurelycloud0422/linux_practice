@@ -4,4 +4,5 @@
 *.mod
 *.symvers
 *.order
+*.cmd
 modules.order
