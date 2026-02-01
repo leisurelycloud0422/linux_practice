@@ -13,7 +13,7 @@ clean:
 # 自動測試工具
 test:
 	sudo dmesg -C
-	sudo insmod modern_way.ko
+	sudo insmod newway.ko
 	sudo chmod 666 /dev/mydev
 	ls -l /dev/mydev
 	sudo dmesg | grep "mydev"
